@@ -1,0 +1,282 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Peter Lawler
+
+send_prompt:
+  name: Send Prompt
+  description: Send a task prompt or steering message to a Junie Remote host.
+  fields:
+    host_key:
+      name: Host Key
+      description: Deterministic host key slug of the target remote host.
+      example: alice_linux_my_project
+      selector:
+        text:
+    entity_id:
+      name: Entity
+      description: Target entity ID of the Junie Remote host (e.g. sensor.alice_linux_my_project_status).
+      example: sensor.alice_linux_my_project_status
+      selector:
+        entity:
+          integration: junie_remote
+    prompt:
+      name: Prompt
+      description: The prompt or instruction text to send to Junie CLI.
+      required: true
+      example: Implement unit tests for the authentication module
+      selector:
+        text:
+          multiline: true
+
+send_plan_prompt:
+  name: Send Plan Refinement Prompt
+  description: Send a plan refinement prompt to an active Junie Remote session.
+  fields:
+    host_key:
+      name: Host Key
+      description: Deterministic host key slug of the target remote host.
+      example: alice_linux_my_project
+      selector:
+        text:
+    entity_id:
+      name: Entity
+      description: Target entity ID of the Junie Remote host.
+      example: sensor.alice_linux_my_project_status
+      selector:
+        entity:
+          integration: junie_remote
+    prompt:
+      name: Refinement Prompt
+      description: Instructions detailing how the proposed plan should be refined.
+      required: true
+      example: Please split the second migration step into two separate tasks.
+      selector:
+        text:
+          multiline: true
+
+respond_request:
+  name: Respond to Interactive Request
+  description: Send a user response or approval to an interactive request initiated by Junie CLI.
+  fields:
+    host_key:
+      name: Host Key
+      description: Deterministic host key slug of the target remote host.
+      example: alice_linux_my_project
+      selector:
+        text:
+    entity_id:
+      name: Entity
+      description: Target entity ID of the Junie Remote host.
+      example: sensor.alice_linux_my_project_status
+      selector:
+        entity:
+          integration: junie_remote
+    request_id:
+      name: Request ID
+      description: Identifier of the active interactive request.
+      required: true
+      example: req-1234
+      selector:
+        text:
+    method:
+      name: Method
+      description: Interactive request type (ask, choice, approve, cancel, or ask-async).
+      required: true
+      default: ask
+      selector:
+        select:
+          options:
+            - ask
+            - choice
+            - approve
+            - cancel
+            - action
+            - ask-async
+    display_text:
+      name: Display Text
+      description: Human-readable response summary displayed in the Junie session transcript.
+      example: Allow once
+      selector:
+        text:
+    response:
+      name: Text Response
+      description: Text answer for ask and ask-async requests.
+      example: Yes, please proceed.
+      selector:
+        text:
+          multiline: true
+    option_id:
+      name: Option ID
+      description: Identifier of the selected option for choice requests.
+      example: opt-1
+      selector:
+        text:
+    option_ids:
+      name: Option IDs
+      description: List of selected option IDs for multi-select ask-async requests.
+      selector:
+        object:
+    approve:
+      name: Approve
+      description: Whether to approve or deny the request (for approve method).
+      default: true
+      selector:
+        boolean:
+    add_to_allow_list:
+      name: Add to Allow List
+      description: Whether to persist approval permanently in Junie's allow-list.
+      default: false
+      selector:
+        boolean:
+    option_index:
+      name: Option Index
+      description: Index of the selected approval option (default 0).
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 10
+    response_payload:
+      name: Raw Response Payload
+      description: Optional pre-constructed response payload dictionary.
+      selector:
+        object:
+
+select_model:
+  name: Select Model and Effort
+  description: Select the active LLM model and reasoning effort level for a Junie Remote host.
+  fields:
+    host_key:
+      name: Host Key
+      description: Deterministic host key slug of the target remote host.
+      example: alice_linux_my_project
+      selector:
+        text:
+    entity_id:
+      name: Entity
+      description: Target entity ID of the Junie Remote host.
+      example: select.alice_linux_my_project_model_effort
+      selector:
+        entity:
+          integration: junie_remote
+    model_id:
+      name: Model ID
+      description: Identifier of the LLM model to select.
+      required: true
+      example: claude-3-7-sonnet
+      selector:
+        text:
+    effort_id:
+      name: Effort ID
+      description: Optional reasoning effort level (e.g. low, medium, high).
+      example: high
+      selector:
+        text:
+
+kick_client:
+  name: Kick Client and Take Over
+  description: Disconnect any conflicting client attached to the Junie Remote tunnel and take over the session.
+  fields:
+    host_key:
+      name: Host Key
+      description: Deterministic host key slug of the target remote host.
+      example: alice_linux_my_project
+      selector:
+        text:
+    entity_id:
+      name: Entity
+      description: Target entity ID of the Junie Remote host.
+      example: button.alice_linux_my_project_take_over
+      selector:
+        entity:
+          integration: junie_remote
+
+confirm_plan:
+  name: Confirm Plan
+  description: Confirm and implement the active proposed plan on a Junie Remote host.
+  fields:
+    host_key:
+      name: Host Key
+      description: Deterministic host key slug of the target remote host.
+      example: alice_linux_my_project
+      selector:
+        text:
+    entity_id:
+      name: Entity
+      description: Target entity ID of the Junie Remote host.
+      example: button.alice_linux_my_project_confirm_plan
+      selector:
+        entity:
+          integration: junie_remote
+
+cancel_task:
+  name: Cancel Task
+  description: Cancel the currently running task on a Junie Remote host.
+  fields:
+    host_key:
+      name: Host Key
+      description: Deterministic host key slug of the target remote host.
+      example: alice_linux_my_project
+      selector:
+        text:
+    entity_id:
+      name: Entity
+      description: Target entity ID of the Junie Remote host.
+      example: button.alice_linux_my_project_stop
+      selector:
+        entity:
+          integration: junie_remote
+
+toggle_brave_mode:
+  name: Toggle Brave Mode
+  description: Enable or disable Brave Mode on a Junie Remote host.
+  fields:
+    host_key:
+      name: Host Key
+      description: Deterministic host key slug of the target remote host.
+      example: alice_linux_my_project
+      selector:
+        text:
+    entity_id:
+      name: Entity
+      description: Target entity ID of the Junie Remote host.
+      example: switch.alice_linux_my_project_brave_mode
+      selector:
+        entity:
+          integration: junie_remote
+    enabled:
+      name: Enabled
+      description: Whether to enable or disable Brave Mode.
+      default: true
+      selector:
+        boolean:
+
+cleanup_transcripts:
+  name: Clean Up Transcripts
+  description: Permanently delete provably owned local transcript files and S3 objects for a specific Junie Remote config entry before removing it. (Admin only)
+  fields:
+    entry_id:
+      name: Config Entry ID
+      description: The Home Assistant config entry ID whose transcripts should be cleaned up.
+      required: true
+      example: 01HABCDEF1234567890ABCDEF1
+      selector:
+        text:
+    confirm:
+      name: Confirm Deletion
+      description: Explicit confirmation to permanently delete all provably owned transcripts for this config entry.
+      required: true
+      default: false
+      selector:
+        boolean:
+
+resume_transcripts:
+  name: Resume Transcripts
+  description: Resume transcript writes for a config entry after cleanup or pause. (Admin only)
+  fields:
+    entry_id:
+      name: Config Entry ID
+      description: The Home Assistant config entry ID whose transcript writes should be resumed.
+      required: true
+      example: 01HABCDEF1234567890ABCDEF1
+      selector:
+        text:

@@ -1,0 +1,87 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "JetBrains Junie Remote Authentication",
+        "description": "Choose how to authenticate with JetBrains Junie Remote. Both choices require you to copy and paste session cookies from your browser; cookies are not captured automatically.",
+        "menu_options": {
+          "manual": "Manual Cookie Input",
+          "jba_oauth": "JBA Web Login"
+        }
+      },
+      "manual": {
+        "title": "Manual Cookie Input",
+        "description": "Enter your session cookies from [Junie Remote](https://junie.jetbrains.com/remote/).\n\n**How to find your cookies:**\n1. Open [Junie Remote](https://junie.jetbrains.com/remote/) in your browser and sign in.\n2. Open Developer Tools (F12 or Ctrl+Shift+I).\n3. Go to the **Application** tab → **Cookies** → `junie.jetbrains.com`.\n4. Copy the values for `SESSION` and `XSRF-TOKEN`.\n5. Paste them as: `SESSION=your_session; XSRF-TOKEN=your_token`\n\n**Required cookies:** `SESSION`, `XSRF-TOKEN` (and optionally `JBA`).",
+        "data": {
+          "auth_input": "Cookie Header",
+          "base_url": "Base URL"
+        }
+      },
+      "jba_oauth": {
+        "title": "JBA Web Login",
+        "description": "Sign in via [JetBrains Account Login]({login_url}) or [Junie Remote](https://junie.jetbrains.com/remote/) in your browser. Copy your session cookies (`SESSION` and `XSRF-TOKEN`) and paste them below.",
+        "data": {
+          "auth_input": "Cookie Header",
+          "base_url": "Base URL"
+        }
+      },
+      "storage": {
+        "title": "Transcript & Session Storage",
+        "description": "Configure where session transcripts and state documents are saved.\n\n**Security warning:** Home Assistant serves everything in `/config/www` at `/local/` without authentication. Earlier versions saved transcripts (prompts, source code and results) in `/config/www/junie_remote`; those copies are NOT deleted and may still be publicly readable and present in backups, so review and remove them yourself. New local transcripts are stored privately and served only to Home Assistant administrators. Paths inside `www` are rejected. S3 exposure depends on your bucket policy, CDN or public base URL, and presigned URLs are bearer credentials.",
+        "data": {
+          "storage_type": "Storage Type",
+          "local_storage_path": "Private local path (relative to /config/, must not be inside www)",
+          "s3_endpoint": "S3 Endpoint URL",
+          "s3_bucket": "S3 Bucket Name",
+          "s3_region": "S3 Region",
+          "s3_access_key": "S3 Access Key ID",
+          "s3_secret_key": "S3 Secret Access Key",
+          "s3_public_url_base": "S3 Public Base URL"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate JetBrains Junie Remote",
+        "description": "Your session has expired. Please enter updated authentication credentials.\n\n**How to find your cookies:**\n1. Open [Junie Remote](https://junie.jetbrains.com/remote/) in your browser and sign in.\n2. Open Developer Tools (F12 or Ctrl+Shift+I).\n3. Go to the **Application** tab → **Cookies** → `junie.jetbrains.com`.\n4. Copy the values for `SESSION` and `XSRF-TOKEN`.\n5. Paste them as: `SESSION=your_session; XSRF-TOKEN=your_token`",
+        "data": {
+          "auth_input": "Cookie Header"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid authentication credentials or empty cookies.",
+      "cannot_connect": "Failed to connect to JetBrains Junie Remote API.",
+      "missing_s3_bucket": "S3 Bucket is required when using S3 storage.",
+      "unknown": "Unexpected error occurred.",
+      "public_local_path": "The local transcript path resolves inside /config/www or the Junie card's public frontend directory. Choose a private path such as junie_remote/transcripts. Other integrations' served directories are not checked; verify any custom path yourself."
+    },
+    "abort": {
+      "already_configured": "JetBrains Junie Remote is already configured.",
+      "reauth_successful": "Re-authentication was successful."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "JetBrains Junie Remote Options",
+        "description": "Update authentication credentials or transcript storage settings.\n\n**Security warning:** Home Assistant serves everything in `/config/www` at `/local/` without authentication. Earlier versions saved transcripts (prompts, source code and results) in `/config/www/junie_remote`; those copies are NOT deleted and may still be publicly readable and present in backups, so review and remove them yourself. New local transcripts are stored privately and served only to Home Assistant administrators. Paths inside `www` are rejected. S3 exposure depends on your bucket policy, CDN or public base URL, and presigned URLs are bearer credentials.",
+        "data": {
+          "auth_input": "Authentication (storageState JSON or Cookie header)",
+          "storage_type": "Storage Type",
+          "local_storage_path": "Private local path (relative to /config/, must not be inside www)",
+          "s3_endpoint": "S3 Endpoint URL",
+          "s3_bucket": "S3 Bucket Name",
+          "s3_region": "S3 Region",
+          "s3_access_key": "S3 Access Key ID",
+          "s3_secret_key": "S3 Secret Access Key",
+          "s3_public_url_base": "S3 Public Base URL"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid authentication credentials or empty cookies.",
+      "cannot_connect": "Failed to connect to JetBrains Junie Remote API.",
+      "missing_s3_bucket": "S3 Bucket is required when using S3 storage.",
+      "public_local_path": "The local transcript path resolves inside /config/www or the Junie card's public frontend directory. Choose a private path such as junie_remote/transcripts. Other integrations' served directories are not checked; verify any custom path yourself."
+    }
+  }
+}

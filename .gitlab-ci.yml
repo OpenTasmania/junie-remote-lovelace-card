@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Peter Lawler
+
+workflow:
+  rules:
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_MESSAGE =~ /skip ci/
+      when: never
+    - when: always
+
+stages:
+  - lint
+  - test
+  - build
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  UV_CACHE_DIR: "$CI_PROJECT_DIR/.cache/uv"
+
+cache:
+  key: "${CI_JOB_NAME}"
+  paths:
+    - .cache/pip
+    - .cache/uv
+    - .pytest_cache
+    - .ruff_cache
+    - .venv
+    - frontend/node_modules
+
+.python_setup: &python_setup
+  image: python:3.12-slim
+  before_script:
+    - python -V
+    - pip install --upgrade pip
+    - pip install uv
+    - uv venv --clear --python $(which python)
+    - uv pip install .[dev]
+
+lint:python:
+  <<: *python_setup
+  stage: lint
+  script:
+    - uv run -- ruff check .
+
+test:python:
+  <<: *python_setup
+  stage: test
+  script:
+    - uv run -- pytest
+
+build:frontend:
+  image: node:22-alpine
+  stage: build
+  script:
+    - cd frontend
+    - npm ci || npm install
+    - npm test
+    - npm run build
+    - test -f ../custom_components/junie_remote/frontend/junie-remote-card.js
+  artifacts:
+    name: "junie-remote-card-$CI_COMMIT_REF_SLUG"
+    paths:
+      - custom_components/junie_remote/frontend/junie-remote-card.js
+    expire_in: 1 week

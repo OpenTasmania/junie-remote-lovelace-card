@@ -1,0 +1,410 @@
+version: 57
+jobs:
+- name: Python Lint & Test
+  executeInSandbox: false
+  steps:
+  - type: CheckoutStep
+    name: Checkout Code
+    cloneCredential:
+      type: DefaultCredential
+    withLfs: false
+    withSubmodules: false
+    condition: SUCCESSFUL
+    optional: false
+  - type: CommandStep
+    name: Lint & Test
+    runInContainer: true
+    image: python:3.12-slim
+    interpreter:
+      type: PosixInterpreter
+      shell: sh
+      commands: |
+        set -eu
+        pip install --upgrade pip
+        apt-get update
+        apt-get install -y --no-install-recommends git openssl
+        pip install ruff pytest pytest-asyncio aiohttp boto3
+        ruff check .
+        pytest
+    runAs: 0:0
+    useTTY: true
+    condition: SUCCESSFUL
+    optional: false
+  triggers:
+  - type: BranchUpdateTrigger
+    branches: master main dev/* dev/** chore/* release/* rc/*
+    userMatch: anyone
+  - type: PullRequestUpdateTrigger
+    branches: master main dev/* dev/** chore/* release/* rc/*
+  retryCondition: never
+  maxAttempts: 3
+  retryDelay: 30
+  includeUpstreamWhenRebuild: false
+  includeDownstreamWhenRebuild: false
+  timeout: 3600
+- name: Frontend Build
+  executeInSandbox: false
+  steps:
+  - type: CheckoutStep
+    name: Checkout Code
+    cloneCredential:
+      type: DefaultCredential
+    withLfs: false
+    withSubmodules: false
+    condition: SUCCESSFUL
+    optional: false
+  - type: CommandStep
+    name: Build Frontend Bundle
+    runInContainer: true
+    image: node:22-alpine
+    interpreter:
+      type: PosixInterpreter
+      shell: sh
+      commands: |
+        set -eu
+        cd frontend
+        npm ci || npm install
+        npm test
+        npm run build
+        test -f ../custom_components/junie_remote/frontend/junie-remote-card.js
+    runAs: 0:0
+    useTTY: true
+    condition: SUCCESSFUL
+    optional: false
+  triggers:
+  - type: BranchUpdateTrigger
+    branches: master main dev/* dev/** chore/* release/* rc/*
+    userMatch: anyone
+  - type: PullRequestUpdateTrigger
+    branches: master main dev/* dev/** chore/* release/* rc/*
+  retryCondition: never
+  maxAttempts: 3
+  retryDelay: 30
+  includeUpstreamWhenRebuild: false
+  includeDownstreamWhenRebuild: false
+  timeout: 3600
+- name: CI Gate
+  executeInSandbox: false
+  steps:
+  - type: CommandStep
+    name: Gate
+    runInContainer: true
+    image: alpine
+    interpreter:
+      type: PosixInterpreter
+      shell: sh
+      commands: echo "CI Gate passed, all Tier 1 and Tier 2 dependencies succeeded"
+    runAs: 0:0
+    useTTY: false
+    condition: SUCCESSFUL
+    optional: false
+  triggers:
+  - type: PullRequestUpdateTrigger
+    branches: master main rc/** release/** dev/** chore/**
+  - type: BranchUpdateTrigger
+    branches: master main rc/** release/**
+    userMatch: anyone
+  jobDependencies:
+  - jobName: Python Lint & Test
+    requireSuccessful: true
+  - jobName: Frontend Build
+    requireSuccessful: true
+  retryCondition: never
+  maxAttempts: 3
+  retryDelay: 30
+  includeUpstreamWhenRebuild: false
+  includeDownstreamWhenRebuild: false
+  timeout: 600
+- name: Release Gate
+  executeInSandbox: false
+  steps:
+  - type: CommandStep
+    name: Gate
+    runInContainer: true
+    image: alpine
+    interpreter:
+      type: PosixInterpreter
+      shell: sh
+      commands: echo "Release Gate passed, all Tier 3 dependencies succeeded"
+    runAs: 0:0
+    useTTY: false
+    condition: SUCCESSFUL
+    optional: false
+  triggers:
+  - type: PullRequestUpdateTrigger
+    branches: master main
+  - type: BranchUpdateTrigger
+    branches: master main
+    userMatch: anyone
+  jobDependencies:
+  - jobName: CI Gate
+    requireSuccessful: true
+  retryCondition: never
+  maxAttempts: 3
+  retryDelay: 30
+  includeUpstreamWhenRebuild: false
+  includeDownstreamWhenRebuild: false
+  timeout: 600
+- name: Publish to GitLab
+  executeInSandbox: false
+  steps:
+  - type: CheckoutStep
+    name: Checkout Source
+    cloneCredential:
+      type: DefaultCredential
+    withLfs: false
+    withSubmodules: false
+    condition: SUCCESSFUL
+    optional: false
+  - type: CommandStep
+    name: Flatten and Push to GitLab
+    runInContainer: true
+    image: alpine/git:latest
+    interpreter:
+      type: PosixInterpreter
+      shell: sh
+      commands: |
+        set -eu
+
+        # Source commit information
+        SOURCE_SHA=$(git rev-parse HEAD)
+        SOURCE_TIMESTAMP=$(git log -1 --format=%ct HEAD)
+        PROJECT_PATH="opentasmania/junie-remote-lovelace-card"
+
+        # Configure git identity
+        git config user.email "bot@@onedev.internal"
+        git config user.name "Publication Bot"
+
+        # Fetch source refs before changing TLS settings for the public remote.
+        git fetch origin --quiet
+        CURRENT_TAGS=$(git tag --points-at "$SOURCE_SHA")
+        if [ -n "$CURRENT_TAGS" ]; then
+            echo "Found tags for this commit: $CURRENT_TAGS"
+        fi
+
+        # Apply GitLab's public CA only after the OneDev fetch has completed.
+        git config --unset-all http.sslCAInfo 2>/dev/null || true
+        git config --global --unset-all http.sslCAInfo 2>/dev/null || true
+        PUBLIC_CA_BUNDLE="${PUBLIC_CA_BUNDLE:-/etc/ssl/certs/ca-certificates.crt}"
+        if [ ! -r "$PUBLIC_CA_BUNDLE" ]; then
+            echo "ERROR: GitLab CA bundle is missing or unreadable"
+            exit 1
+        fi
+        git config http.https://gitlab.com.sslCAInfo "$PUBLIC_CA_BUNDLE"
+        : "${GITLAB_TOKEN:?GITLAB_TOKEN is required}"
+
+        # Create orphan commit with deterministic identity
+        git checkout --orphan public-release
+        git add -A
+        GIT_AUTHOR_DATE="$SOURCE_TIMESTAMP" GIT_COMMITTER_DATE="$SOURCE_TIMESTAMP" \
+          git commit -m "Public Release: $SOURCE_SHA"
+        PUBLISHED_SHA=$(git rev-parse HEAD)
+
+        # Verify the published tree contains required files
+        echo "Verifying published tree..."
+        test -f custom_components/junie_remote/manifest.json || { echo "ERROR: manifest.json missing"; exit 1; }
+        test -f custom_components/junie_remote/frontend/junie-remote-card.js || { echo "ERROR: card bundle missing"; exit 1; }
+        test -f hacs.json || { echo "ERROR: hacs.json missing"; exit 1; }
+
+        # Retarget only this source commit's tags to the flattened snapshot.
+        if [ -n "$CURRENT_TAGS" ]; then
+            for tag in $CURRENT_TAGS; do
+                git tag --force "$tag" "$PUBLISHED_SHA"
+            done
+        fi
+
+        push_gitlab() (
+            unset GIT_SSL_NO_VERIFY GIT_SSL_CAPATH
+            GIT_SSL_CAINFO="$PUBLIC_CA_BUNDLE" git \
+              -c credential.helper= \
+              -c http.sslVerify=true \
+              -c http.sslCAInfo="$PUBLIC_CA_BUNDLE" \
+              -c http.sslCAPath= \
+              -c http.https://gitlab.com.sslVerify=true \
+              -c http.https://gitlab.com.sslCAInfo="$PUBLIC_CA_BUNDLE" \
+              -c http.https://gitlab.com.sslCAPath= \
+              -c "http.https://gitlab.com/${PROJECT_PATH}.git.sslVerify=true" \
+              -c "http.https://gitlab.com/${PROJECT_PATH}.git.sslCAInfo=$PUBLIC_CA_BUNDLE" \
+              -c "http.https://gitlab.com/${PROJECT_PATH}.git.sslCAPath=" \
+              push --force "$1" "$2"
+        )
+
+        # Push only the branch, not all tags
+        echo "Pushing flattened single-commit branch to GitLab..."
+        push_gitlab "https://oauth2:${GITLAB_TOKEN}@@gitlab.com/${PROJECT_PATH}.git" public-release:master
+
+        # Only push tags that point at this specific commit
+        if [ -n "$CURRENT_TAGS" ]; then
+            for tag in $CURRENT_TAGS; do
+                echo "Pushing tag '$tag'..."
+                push_gitlab "https://oauth2:${GITLAB_TOKEN}@@gitlab.com/${PROJECT_PATH}.git" "refs/tags/$tag"
+            done
+        fi
+
+        echo "Published to GitLab successfully."
+    runAs: 0:0
+    envVars:
+    - name: GITLAB_TOKEN
+      value: '@secrets:GITLAB_TOKEN@'
+    - name: PUBLIC_CA_BUNDLE
+      value: /etc/ssl/certs/ca-certificates.crt
+    useTTY: false
+    condition: SUCCESSFUL
+    optional: false
+  triggers:
+  - type: BranchUpdateTrigger
+    branches: master main
+    userMatch: anyone
+  - type: TagCreateTrigger
+    tags: v*
+    branches: master main
+  jobDependencies:
+  - jobName: Release Gate
+    requireSuccessful: true
+  retryCondition: never
+  maxAttempts: 3
+  retryDelay: 30
+  includeUpstreamWhenRebuild: false
+  includeDownstreamWhenRebuild: false
+  timeout: 3600
+- name: Publish to GitHub
+  executeInSandbox: false
+  steps:
+  - type: CheckoutStep
+    name: Checkout Source
+    cloneCredential:
+      type: DefaultCredential
+    withLfs: false
+    withSubmodules: false
+    condition: SUCCESSFUL
+    optional: false
+  - type: CommandStep
+    name: Flatten and Push to GitHub
+    runInContainer: true
+    image: alpine/git:latest
+    interpreter:
+      type: PosixInterpreter
+      shell: sh
+      commands: |
+        set -eu
+
+        # Source commit information
+        SOURCE_SHA=$(git rev-parse HEAD)
+        SOURCE_TIMESTAMP=$(git log -1 --format=%ct HEAD)
+        GITHUB_REPO="OpenTasmania/junie-remote-lovelace-card"
+
+        # Configure git identity
+        git config user.email "bot@@onedev.internal"
+        git config user.name "Publication Bot"
+
+        # Fetch only the specific tags for this commit
+        git fetch origin --quiet
+        CURRENT_TAGS=$(git tag --points-at "$SOURCE_SHA")
+        if [ -n "$CURRENT_TAGS" ]; then
+            echo "Found tags for this commit: $CURRENT_TAGS"
+        fi
+
+        # Select public trust only for GitHub pushes, after the OneDev fetch.
+        # If interception requires extra roots, configure PUBLIC_CA_BUNDLE with
+        # a complete bundle; keep HTTPS proxy trust in GIT_PROXY_SSL_CAINFO.
+        PUBLIC_CA_BUNDLE="${PUBLIC_CA_BUNDLE:-/etc/ssl/certs/ca-certificates.crt}"
+        if [ ! -r "$PUBLIC_CA_BUNDLE" ]; then
+            echo "ERROR: GitHub CA bundle is missing or unreadable"
+            exit 1
+        fi
+        : "${GITHUB_TOKEN:?GITHUB_TOKEN is required}"
+
+        # Keep the token out of Git's command arguments and remote URL.
+        umask 077
+        ASKPASS_SCRIPT=$(mktemp)
+        trap 'rm -f "$ASKPASS_SCRIPT"' EXIT HUP INT TERM
+        cat > "$ASKPASS_SCRIPT" <<'ASKPASS'
+        #!/bin/sh
+        case "$1" in
+            *"https://github.com'"*|*"https://github.com:"*|*"https://github.com/"*|*"https://x-access-token@@github.com'"*|*"https://x-access-token@@github.com:"*|*"https://x-access-token@@github.com/"*)
+                case "$1" in
+                    *Username*) printf '%s\n' 'x-access-token' ;;
+                    *Password*) printf '%s\n' "$GITHUB_TOKEN" ;;
+                    *) exit 1 ;;
+                esac
+                ;;
+            *) exit 1 ;;
+        esac
+        ASKPASS
+        chmod 700 "$ASKPASS_SCRIPT"
+
+        # Create orphan commit with deterministic identity
+        git checkout --orphan public-release
+        git add -A
+        GIT_AUTHOR_DATE="$SOURCE_TIMESTAMP" GIT_COMMITTER_DATE="$SOURCE_TIMESTAMP" \
+          git commit -m "Public Release: $SOURCE_SHA"
+        PUBLISHED_SHA=$(git rev-parse HEAD)
+
+        # Verify the published tree contains required files
+        echo "Verifying published tree..."
+        test -f custom_components/junie_remote/manifest.json || { echo "ERROR: manifest.json missing"; exit 1; }
+        test -f custom_components/junie_remote/frontend/junie-remote-card.js || { echo "ERROR: card bundle missing"; exit 1; }
+        test -f hacs.json || { echo "ERROR: hacs.json missing"; exit 1; }
+
+        # Retarget only this source commit's tags to the flattened snapshot.
+        if [ -n "$CURRENT_TAGS" ]; then
+            for tag in $CURRENT_TAGS; do
+                git tag --force "$tag" "$PUBLISHED_SHA"
+            done
+        fi
+
+        push_github() (
+            unset GIT_SSL_NO_VERIFY GIT_SSL_CAPATH
+            GIT_ASKPASS="$ASKPASS_SCRIPT" GIT_TERMINAL_PROMPT=0 \
+              GIT_SSL_CAINFO="$PUBLIC_CA_BUNDLE" git \
+              -c credential.helper= \
+              -c http.sslVerify=true \
+              -c http.sslCAInfo="$PUBLIC_CA_BUNDLE" \
+              -c http.sslCAPath= \
+              -c http.https://github.com.sslVerify=true \
+              -c http.https://github.com.sslCAInfo="$PUBLIC_CA_BUNDLE" \
+              -c http.https://github.com.sslCAPath= \
+              -c "http.https://github.com/${GITHUB_REPO}.git.sslVerify=true" \
+              -c "http.https://github.com/${GITHUB_REPO}.git.sslCAInfo=$PUBLIC_CA_BUNDLE" \
+              -c "http.https://github.com/${GITHUB_REPO}.git.sslCAPath=" \
+              push --force "$1" "$2"
+        )
+
+        # Push only the branch
+        echo "Pushing flattened single-commit branch to GitHub..."
+        push_github "https://github.com/${GITHUB_REPO}.git" public-release:main
+
+        # Only push tags that point at this specific commit
+        if [ -n "$CURRENT_TAGS" ]; then
+            for tag in $CURRENT_TAGS; do
+                echo "Pushing tag '$tag' to GitHub..."
+                push_github "https://github.com/${GITHUB_REPO}.git" "refs/tags/$tag"
+            done
+        fi
+
+        echo "Published to GitHub successfully."
+    runAs: 0:0
+    envVars:
+    - name: GITHUB_TOKEN
+      value: '@secrets:GITHUB_TOKEN@'
+    - name: PUBLIC_CA_BUNDLE
+      value: /etc/ssl/certs/ca-certificates.crt
+    useTTY: false
+    condition: SUCCESSFUL
+    optional: false
+  triggers:
+  - type: BranchUpdateTrigger
+    branches: master main
+    userMatch: anyone
+  - type: TagCreateTrigger
+    tags: v*
+    branches: master main
+  jobDependencies:
+  - jobName: Release Gate
+    requireSuccessful: true
+  retryCondition: never
+  maxAttempts: 3
+  retryDelay: 30
+  includeUpstreamWhenRebuild: false
+  includeDownstreamWhenRebuild: false
+  timeout: 3600

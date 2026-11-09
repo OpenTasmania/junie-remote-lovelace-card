@@ -1,0 +1,21 @@
+{
+  "domain": "junie_remote",
+  "name": "JetBrains Junie Remote",
+  "codeowners": [
+    "@plawler"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "http",
+    "auth"
+  ],
+  "documentation": "https://gitlab.com/opentasmania/junie-remote-lovelace-card",
+  "integration_type": "hub",
+  "iot_class": "cloud_push",
+  "issue_tracker": "https://gitlab.com/opentasmania/junie-remote-lovelace-card/-/issues",
+  "requirements": [
+    "aiohttp>=3.9.0",
+    "boto3>=1.34.0"
+  ],
+  "version": "0.2.0"
+}
